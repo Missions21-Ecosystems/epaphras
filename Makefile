@@ -2,7 +2,7 @@
 DC := docker compose
 PY := python3
 
-.PHONY: help up down logs restart test preview once send-now mailpit-test
+.PHONY: help up down logs restart test preview once send-now resend mailpit-test
 
 help: ## Show targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  %-13s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -34,6 +34,9 @@ once: .env ## One poll + digest if due, using the container's state volume
 
 send-now: .env ## One poll + send the digest now regardless of DIGEST_TIME
 	$(DC) run --rm dmarcd --once --now
+
+resend: .env ## Rebuild the last digest from stored reports and send it again
+	$(DC) run --rm dmarcd --resend
 
 mailpit-test: ## Digest the test fixtures and deliver it to a local Mailpit (localhost:1025)
 	env -i PATH="$$PATH" HOME="$$HOME" EMAIL=dmarc@example.org PASSWORD=- IMAP_HOST=- \

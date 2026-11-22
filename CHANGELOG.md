@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 — 2026-11-22
+
+- `--resend` rebuilds the most recent digest from the stored reports with the
+  current layout and sends it again, without changing any state (add
+  `--dry-run` to only preview). Useful after upgrading.
+
 ## 0.4.0 — 2026-11-22
 
 - `INBOX_CLEANUP=1` treats the mailbox as a no-reply, report-only inbox:

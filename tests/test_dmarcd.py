@@ -234,6 +234,20 @@ class FlowTests(unittest.TestCase):
         store.record_digest(msg_out["Subject"], c.forward_to, *ids)
         self.assertIsNone(build_digest(c, store))
 
+    def test_resend_rebuilds_last_digest(self):
+        store = Store(":memory:")
+        msg = MIMEMultipart()
+        msg.attach(MIMEApplication(fixture("google.zip"), "zip", Name="g.zip"))
+        ingest(store, msg.as_bytes())
+        self.assertEqual(store.last_digest_items(), ([], [], []))
+        c = cfg()
+        first = build_digest(c, store)
+        store.record_digest(first[0]["Subject"], c.forward_to, *first[1])
+        self.assertIsNone(build_digest(c, store))  # nothing pending
+        again = build_digest(c, store, store.last_digest_items())
+        self.assertEqual(again[0]["Subject"], first[0]["Subject"])
+        self.assertEqual(again[2], first[2])
+
     def test_non_report_mail_ignored(self):
         store = Store(":memory:")
         msg = EmailMessage()

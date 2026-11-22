@@ -5,6 +5,8 @@
     python -m dmarcd --once --now    ...and send it now even if DIGEST_TIME isn't reached
     python -m dmarcd --dry-run       read the mailbox read-only, write the digest to
                                      DATA_DIR/preview/ instead of sending; changes nothing
+    python -m dmarcd --resend        rebuild the last digest from stored reports and send it
+                                     again (e.g. after an upgrade); changes no state
     python -m dmarcd --file a.xml.gz b.zip       digest from local files (no mailbox) and
                                      send it; add --dry-run to only preview it
 """
@@ -154,9 +156,10 @@ def digest_due(cfg: Config, store: Store, now: datetime | None = None) -> bool:
     return store.last_digest_at() < slot.timestamp()
 
 
-def build_digest(cfg: Config, store: Store):
-    """(EmailMessage, ids) for everything not yet sent, or None."""
-    reports_rows, forensic_rows, note_rows = store.pending()
+def build_digest(cfg: Config, store: Store, items=None):
+    """(EmailMessage, ids, text, html) for everything not yet sent (or for
+    the given (reports, forensic, notes) rows), or None."""
+    reports_rows, forensic_rows, note_rows = items if items is not None else store.pending()
     if not reports_rows and not forensic_rows:
         return None  # notes alone (e.g. only duplicates) aren't worth an email
     reports = []
@@ -238,6 +241,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--once", action="store_true", help="run one cycle and exit")
     ap.add_argument("--now", action="store_true", help="with --once: send the digest regardless of DIGEST_TIME")
     ap.add_argument("--dry-run", action="store_true", help="read-only; write the digest to DATA_DIR/preview/")
+    ap.add_argument("--resend", action="store_true",
+                    help="rebuild the most recent digest from stored reports (current layout) and send it again; "
+                         "changes no state (combine with --dry-run to only preview)")
     ap.add_argument("--file", nargs="*", default=[], help="build a digest from local report files instead of the mailbox")
     args = ap.parse_args(argv)
 
@@ -252,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s", stream=sys.stdout)
     os.makedirs(cfg.data_dir, exist_ok=True)
 
-    if args.dry_run or args.file:
+    if (args.dry_run and not args.resend) or args.file:
         store = Store(":memory:")  # never touches real state
         for path in args.file:
             log.info("%s: %s", path, ingest_file(store, path))
@@ -264,6 +270,23 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     store = Store(cfg.db_path)
+    if args.resend:
+        built = build_digest(cfg, store, store.last_digest_items())
+        if not built:
+            log.info("no digest has been sent yet; nothing to resend")
+            return 1
+        msg, _ids, text, html = built
+        if args.dry_run:
+            out = os.path.join(cfg.data_dir, "preview")
+            os.makedirs(out, exist_ok=True)
+            for name, body in (("digest.txt", text), ("digest.html", html)):
+                with open(os.path.join(out, name), "w", encoding="utf-8") as fh:
+                    fh.write(body)
+            log.info("resend dry run: wrote %s/digest.{txt,html} — %s", out, msg["Subject"])
+        else:
+            mail.send(cfg, msg)
+            log.info("resent last digest to %s: %s", ", ".join(cfg.forward_to), msg["Subject"])
+        return 0
     if args.once:
         cycle(cfg, store, force_send=args.now)
         return 0

@@ -95,6 +95,7 @@ dmarcd --env .env        # runs forever; DATA_DIR defaults to /data, set it e.g.
 | `dmarcd --once` | one check, then send the digest if one is due |
 | `dmarcd --once --now` | one check and send the digest now, ignoring `DIGEST_TIME` |
 | `dmarcd --dry-run` | read the mailbox read-only and write the digest to `DATA_DIR/preview/` — marks nothing, sends nothing, uses no saved state |
+| `dmarcd --resend` | rebuild the last digest from stored reports with the current layout and send it again (`--dry-run` to only preview); changes no state |
 | `dmarcd --file a.xml.gz b.zip c.eml` | build a digest from local files and send it (`--dry-run` to only preview) |
 
 `make test` runs the unit tests (`python3 tests/make_fixtures.py` regenerates the fixtures); `make mailpit-test` delivers a digest built

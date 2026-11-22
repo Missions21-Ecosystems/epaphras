@@ -86,6 +86,15 @@ class Store:
         self.db.commit()
         return did
 
+    def last_digest_items(self):
+        """(reports, forensic, notes) included in the most recent digest."""
+        row = self.db.execute("SELECT MAX(id) AS id FROM digests").fetchone()
+        if not row["id"]:
+            return [], [], []
+        did = row["id"]
+        return tuple(self.db.execute(f"SELECT * FROM {t} WHERE digest_id=? ORDER BY id", (did,)).fetchall()
+                     for t in ("reports", "forensic", "notes"))
+
     def last_digest_at(self) -> int:
         row = self.db.execute("SELECT MAX(sent_at) AS t FROM digests").fetchone()
         return row["t"] or 0
