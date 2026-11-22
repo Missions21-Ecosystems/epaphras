@@ -1,19 +1,19 @@
-# dmarcd: polls the report mailbox and emails a readable digest.
+# epaphras: polls the report mailbox and emails a readable digest.
 #   cp example.env .env   # fill in
 #   docker compose up -d
-name: dmarcd
+name: epaphras
 
 services:
-  dmarcd:
+  epaphras:
     build: .
-    image: dmarcd:local
+    image: epaphras:local
     restart: unless-stopped
     env_file: .env
     volumes:
-      - dmarcd_data:/data
+      - epaphras_data:/data
     # For testing against a local mail catcher on the host (SMTP_HOST=host.docker.internal).
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
 volumes:
-  dmarcd_data:
+  epaphras_data:

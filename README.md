@@ -1,15 +1,22 @@
-# dmarcd
+# Epaphras
+
+**DMARC reports, read for you and explained in plain language.**
 
 A small service that watches the mailbox your DMARC aggregate reports go to,
 reads the reports (`.xml.gz`, `.zip` or `.xml`), and emails you a readable
-digest that says what, if anything, you need to fix.
+digest that says what, if anything, you need to fix — with a short,
+jargon-free summary on top for people who don't manage email systems.
+
+*The name: Epaphras was the faithful messenger who brought Paul a report on
+how things stood in Colossae (Colossians 1:7–8). This one brings you the
+report on how your domain's email stands.*
 
 Python 3.10+ standard library only — no third-party dependencies.
 
-**No AI.** dmarcd does not use AI or language models to read your reports or
+**No AI.** epaphras does not use AI or language models to read your reports or
 write the digest. Reports are parsed as XML, and every finding and
 recommendation comes from fixed, readable rules in
-[dmarcd/analyze.py](dmarcd/analyze.py). The same reports (and reverse-DNS
+[epaphras/analyze.py](epaphras/analyze.py). The same reports (and reverse-DNS
 answers) always produce the same digest, and your report data never leaves
 your machine — the only outbound connections are to your own mail server and
 reverse-DNS lookups of the sending IPs (turn those off with `RDNS=0`).
@@ -84,19 +91,19 @@ Without Docker:
 
 ```sh
 pip install .            # or just run from the checkout
-dmarcd --env .env        # runs forever; DATA_DIR defaults to /data, set it e.g. DATA_DIR=./data
+epaphras --env .env        # runs forever; DATA_DIR defaults to /data, set it e.g. DATA_DIR=./data
 ```
 
 ## Commands
 
 | | |
 |---|---|
-| `dmarcd` | run forever |
-| `dmarcd --once` | one check, then send the digest if one is due |
-| `dmarcd --once --now` | one check and send the digest now, ignoring `DIGEST_TIME` |
-| `dmarcd --dry-run` | read the mailbox read-only and write the digest to `DATA_DIR/preview/` — marks nothing, sends nothing, uses no saved state |
-| `dmarcd --resend` | rebuild the last digest from stored reports with the current layout and send it again (`--dry-run` to only preview); changes no state |
-| `dmarcd --file a.xml.gz b.zip c.eml` | build a digest from local files and send it (`--dry-run` to only preview) |
+| `epaphras` | run forever |
+| `epaphras --once` | one check, then send the digest if one is due |
+| `epaphras --once --now` | one check and send the digest now, ignoring `DIGEST_TIME` |
+| `epaphras --dry-run` | read the mailbox read-only and write the digest to `DATA_DIR/preview/` — marks nothing, sends nothing, uses no saved state |
+| `epaphras --resend` | rebuild the last digest from stored reports with the current layout and send it again (`--dry-run` to only preview); changes no state |
+| `epaphras --file a.xml.gz b.zip c.eml` | build a digest from local files and send it (`--dry-run` to only preview) |
 
 `make test` runs the unit tests (`python3 tests/make_fixtures.py` regenerates the fixtures); `make mailpit-test` delivers a digest built
 from the test fixtures to a local Mailpit on `localhost:1025`.

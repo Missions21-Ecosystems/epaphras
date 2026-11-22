@@ -13,13 +13,13 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from dmarcd import analyze, extract, plain, render  # noqa: E402
-from dmarcd import mail  # noqa: E402
-from dmarcd import __main__ as main_mod  # noqa: E402
-from dmarcd.__main__ import build_digest, digest_due, fully_handled, ingest  # noqa: E402
-from dmarcd.config import Config  # noqa: E402
-from dmarcd.parse import ReportError, parse_report  # noqa: E402
-from dmarcd.store import Store  # noqa: E402
+from epaphras import analyze, extract, plain, render  # noqa: E402
+from epaphras import mail  # noqa: E402
+from epaphras import __main__ as main_mod  # noqa: E402
+from epaphras.__main__ import build_digest, digest_due, fully_handled, ingest  # noqa: E402
+from epaphras.config import Config  # noqa: E402
+from epaphras.parse import ReportError, parse_report  # noqa: E402
+from epaphras.store import Store  # noqa: E402
 
 FIX = os.path.join(os.path.dirname(__file__), "fixtures")
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0 — 2026-11-22
+
+- Renamed from `dmarcd` to **Epaphras**: Python package and command
+  `epaphras`, Docker image `epaphras:local`, Compose project `epaphras`
+  (state volume `epaphras_data`). Existing installs: copy the old
+  `dmarcd_dmarcd_data` volume into `epaphras_epaphras_data` before starting,
+  or every message in the mailbox is treated as new.
+- First public release.
+
 ## 0.5.0 — 2026-11-22
 
 - `--resend` rebuilds the most recent digest from the stored reports with the
@@ -20,7 +29,7 @@
   plain-language status, a few jargon-free sentences (is our email checking
   out, is anyone impersonating us, is any of our own mail failing, how strong
   is protection) and who needs to act. Built from the same analysis as the
-  technical findings (`dmarcd/plain.py`), so the two always agree.
+  technical findings (`epaphras/plain.py`), so the two always agree.
 
 ## 0.2.0 — 2026-11-22
 

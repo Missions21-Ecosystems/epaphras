@@ -3,8 +3,8 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dmarcd"
-version = "0.5.0"
+name = "epaphras"
+version = "1.0.0"
 description = "Poll a DMARC report mailbox and email a human-readable digest with action items"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,7 @@ license = { text = "MIT" }
 dependencies = []
 
 [project.scripts]
-dmarcd = "dmarcd.__main__:main"
+epaphras = "epaphras.__main__:main"
 
 [tool.setuptools]
-packages = ["dmarcd"]
+packages = ["epaphras"]

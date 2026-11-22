@@ -27,18 +27,18 @@ test: ## Run the unit tests
 	$(PY) -m unittest discover -s tests -v
 
 preview: .env ## Read the mailbox read-only and write the digest to data/preview/ (sends nothing, changes nothing)
-	DATA_DIR=./data $(PY) -m dmarcd --dry-run
+	DATA_DIR=./data $(PY) -m epaphras --dry-run
 
 once: .env ## One poll + digest if due, using the container's state volume
-	$(DC) run --rm dmarcd --once
+	$(DC) run --rm epaphras --once
 
 send-now: .env ## One poll + send the digest now regardless of DIGEST_TIME
-	$(DC) run --rm dmarcd --once --now
+	$(DC) run --rm epaphras --once --now
 
 resend: .env ## Rebuild the last digest from stored reports and send it again
-	$(DC) run --rm dmarcd --resend
+	$(DC) run --rm epaphras --resend
 
 mailpit-test: ## Digest the test fixtures and deliver it to a local Mailpit (localhost:1025)
 	env -i PATH="$$PATH" HOME="$$HOME" EMAIL=dmarc@example.org PASSWORD=- IMAP_HOST=- \
 	  FWD_REPORT_EMAIL=you@example.org SMTP_HOST=localhost SMTP_PORT=1025 SMTP_SECURITY=none SMTP_USER= \
-	  DATA_DIR=./data/mailpit-test $(PY) -m dmarcd --env /dev/null --file tests/fixtures/*
+	  DATA_DIR=./data/mailpit-test $(PY) -m epaphras --env /dev/null --file tests/fixtures/*

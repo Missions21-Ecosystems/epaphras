@@ -1,13 +1,13 @@
-"""dmarcd: poll a mailbox for DMARC reports, email a readable digest.
+"""epaphras: poll a mailbox for DMARC reports, email a readable digest.
 
-    python -m dmarcd                 run forever (poll every POLL_INTERVAL_SECONDS)
-    python -m dmarcd --once          one poll, then send the digest if one is due
-    python -m dmarcd --once --now    ...and send it now even if DIGEST_TIME isn't reached
-    python -m dmarcd --dry-run       read the mailbox read-only, write the digest to
+    python -m epaphras                 run forever (poll every POLL_INTERVAL_SECONDS)
+    python -m epaphras --once          one poll, then send the digest if one is due
+    python -m epaphras --once --now    ...and send it now even if DIGEST_TIME isn't reached
+    python -m epaphras --dry-run       read the mailbox read-only, write the digest to
                                      DATA_DIR/preview/ instead of sending; changes nothing
-    python -m dmarcd --resend        rebuild the last digest from stored reports and send it
+    python -m epaphras --resend        rebuild the last digest from stored reports and send it
                                      again (e.g. after an upgrade); changes no state
-    python -m dmarcd --file a.xml.gz b.zip       digest from local files (no mailbox) and
+    python -m epaphras --file a.xml.gz b.zip       digest from local files (no mailbox) and
                                      send it; add --dry-run to only preview it
 """
 
@@ -29,7 +29,7 @@ from .config import Config, load_dotenv
 from .parse import ReportError, parse_report
 from .store import Store
 
-log = logging.getLogger("dmarcd")
+log = logging.getLogger("epaphras")
 _stop = False
 
 
@@ -236,7 +236,7 @@ def _on_signal(signum, _frame):
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="dmarcd", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="epaphras", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--env", default=".env", help="env file to load when not under Compose (default .env)")
     ap.add_argument("--once", action="store_true", help="run one cycle and exit")
     ap.add_argument("--now", action="store_true", help="with --once: send the digest regardless of DIGEST_TIME")
