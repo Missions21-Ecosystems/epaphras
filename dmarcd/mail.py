@@ -34,8 +34,17 @@ class Mailbox:
             raise RuntimeError(f"cannot open folder {cfg.imap_folder!r}")
         typ, data = self.conn.response("UIDVALIDITY")
         self.uidvalidity = int(data[0]) if data and data[0] else 0
-        caps = self.conn.capabilities
+        # imaplib only remembers the pre-login capability list; many servers
+        # (Dovecot, …) advertise MOVE/UIDPLUS only after login, so ask again.
+        caps = {c.upper() for c in self.conn.capabilities}
+        try:
+            typ, data = self.conn.capability()
+            if typ == "OK" and data and data[0]:
+                caps |= {c.upper() for c in data[0].decode("ascii", "replace").split()}
+        except imaplib.IMAP4.error:
+            pass
         self.can_move = "MOVE" in caps
+        self.can_uid_expunge = "UIDPLUS" in caps
 
     def uids(self) -> list[int]:
         typ, data = self.conn.uid("SEARCH", None, "ALL")
@@ -55,22 +64,39 @@ class Mailbox:
                     break
 
     def done(self, uid: int) -> None:
-        """Mark handled: \\Seen, and move to the archive folder if configured."""
+        """A message's reports are safely stored: mark it read, then keep,
+        move or delete it according to PROCESSED_ACTION."""
         if self.readonly:
             return
         self.conn.uid("STORE", str(uid), "+FLAGS.SILENT", r"(\Seen)")
-        folder = self.cfg.archive_folder
-        if not folder:
-            return
-        if self.can_move:
-            typ, data = self.conn.uid("MOVE", str(uid), _quote(folder))
-        else:
-            typ, data = self.conn.uid("COPY", str(uid), _quote(folder))
-            if typ == "OK":
-                self.conn.uid("STORE", str(uid), "+FLAGS.SILENT", r"(\Deleted)")
-                self.conn.expunge()
+        action = self.cfg.processed_action
+        if action == "move":
+            folder = self.cfg.archive_folder
+            if self.can_move:
+                typ, data = self.conn.uid("MOVE", str(uid), _quote(folder))
+            else:
+                typ, data = self.conn.uid("COPY", str(uid), _quote(folder))
+                if typ == "OK":
+                    self._expunge(uid)
+            if typ != "OK":
+                log.warning("could not move uid %s to %s: %s", uid, folder, data)
+        elif action == "delete":
+            self._expunge(uid)
+
+    def _expunge(self, uid: int) -> None:
+        """Permanently remove one message. With UIDPLUS only that message is
+        expunged; without it, a plain EXPUNGE also removes anything else in
+        the folder already flagged \\Deleted (by another client)."""
+        typ, data = self.conn.uid("STORE", str(uid), "+FLAGS.SILENT", r"(\Deleted)")
         if typ != "OK":
-            log.warning("could not move uid %s to %s: %s", uid, folder, data)
+            log.warning("could not flag uid %s for deletion: %s", uid, data)
+            return
+        if self.can_uid_expunge:
+            typ, data = self.conn.uid("EXPUNGE", str(uid))
+        else:
+            typ, data = self.conn.expunge()
+        if typ != "OK":
+            log.warning("expunge of uid %s failed: %s", uid, data)
 
     def ensure_folder(self, folder: str) -> None:
         if self.readonly or not folder:

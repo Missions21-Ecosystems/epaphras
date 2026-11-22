@@ -39,6 +39,12 @@ def _header(msg, name: str) -> str:
         return str(raw)
 
 
+def fully_handled(outcome: str) -> bool:
+    """True when every report in the message was read and stored (or was a
+    known duplicate), so the message itself is no longer needed."""
+    return outcome != "no-report" and " bad=0 " in f" {outcome} "
+
+
 def ingest(store: Store, raw: bytes, label: str = "") -> str:
     """Store whatever reports a message holds. Returns a short outcome."""
     msg = extract.parse_message(raw)
@@ -90,7 +96,8 @@ def store_payloads(store: Store, payloads, forensic, subject: str) -> str:
 def poll(cfg: Config, store: Store, readonly: bool = False) -> int:
     box = mail.Mailbox(cfg, readonly=readonly)
     try:
-        box.ensure_folder(cfg.archive_folder)
+        if cfg.processed_action == "move":
+            box.ensure_folder(cfg.archive_folder)
         seen = store.seen(cfg.imap_folder, box.uidvalidity)
         new = [u for u in box.uids() if u not in seen]
         if new:
@@ -102,7 +109,16 @@ def poll(cfg: Config, store: Store, readonly: bool = False) -> int:
                                _header(msg, "From"), _header(msg, "Subject"), outcome)
             store.commit()  # per message, so a crash never re-processes or loses one
             log.info("uid %s from %s: %s", uid, _header(msg, "From"), outcome)
-            box.done(uid)
+            if fully_handled(outcome):
+                box.done(uid)
+            else:
+                # Not ours to tidy away: a human message, or a report we
+                # couldn't read. Leave it unread where it is.
+                if outcome == "no-report":
+                    store.add_note(f"Left in {cfg.imap_folder} (no DMARC report in it): "
+                                   f"“{_header(msg, 'Subject')}” from {_header(msg, 'From')}.")
+                    store.commit()
+                log.info("uid %s left in place, unread", uid)
         return len(new)
     finally:
         box.close()
@@ -244,8 +260,9 @@ def main(argv: list[str] | None = None) -> int:
 
     signal.signal(signal.SIGTERM, _on_signal)
     signal.signal(signal.SIGINT, _on_signal)
-    log.info("watching %s@%s/%s every %ss; digests to %s%s", cfg.imap_user, cfg.imap_host, cfg.imap_folder,
-             cfg.poll_interval, ", ".join(cfg.forward_to), f" daily at {cfg.digest_time} {cfg.tz}" if cfg.digest_time else "")
+    log.info("watching %s@%s/%s every %ss (processed mail: %s); digests to %s%s", cfg.imap_user, cfg.imap_host,
+             cfg.imap_folder, cfg.poll_interval,
+             {"keep": "kept", "move": f"moved to {cfg.archive_folder}", "delete": "deleted"}[cfg.processed_action], ", ".join(cfg.forward_to), f" daily at {cfg.digest_time} {cfg.tz}" if cfg.digest_time else "")
     while not _stop:
         cycle(cfg, store)
         deadline = time.monotonic() + cfg.poll_interval

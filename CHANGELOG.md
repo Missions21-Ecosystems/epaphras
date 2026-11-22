@@ -1,0 +1,22 @@
+# Changelog
+
+## 0.2.0 — 2026-11-22
+
+- `PROCESSED_ACTION=keep|move|delete` decides what happens to a report email
+  once its reports are saved (default `keep`; setting only
+  `IMAP_ARCHIVE_FOLDER` still means `move`). Deletion expunges just that
+  message (UID EXPUNGE).
+- Messages without a DMARC report, or whose report can't be read, are no
+  longer marked read or moved: they stay unread in place and the next digest
+  lists them.
+- Fix: IMAP capabilities are re-read after login. Servers that announce
+  MOVE/UIDPLUS only to logged-in clients (e.g. Dovecot) were treated as
+  lacking them, which made moves fall back to COPY + folder-wide EXPUNGE.
+- README notes that no AI is involved in reading reports or writing digests.
+
+## 0.1.0 — 2026-11-22
+
+- First release: IMAP polling, report extraction (.xml.gz/.zip/.xml,
+  attachments, single-part bodies, forwards), DMARC 1.0/2.0 parsing,
+  per-source analysis with ranked findings, HTML + text digest with CSV and
+  original attachments, Docker Compose deployment, MIT license.

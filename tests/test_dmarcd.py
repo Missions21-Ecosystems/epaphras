@@ -14,7 +14,9 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from dmarcd import analyze, extract, render  # noqa: E402
-from dmarcd.__main__ import build_digest, digest_due, ingest  # noqa: E402
+from dmarcd import mail  # noqa: E402
+from dmarcd import __main__ as main_mod  # noqa: E402
+from dmarcd.__main__ import build_digest, digest_due, fully_handled, ingest  # noqa: E402
 from dmarcd.config import Config  # noqa: E402
 from dmarcd.parse import ReportError, parse_report  # noqa: E402
 from dmarcd.store import Store  # noqa: E402
@@ -253,6 +255,165 @@ class FlowTests(unittest.TestCase):
     def test_subject_counts(self):
         s = analyze.summarize([parse_report(report_xml(rec("203.0.113.50", 12, "fail", "fail")))])
         self.assertIn("action item", render.subject(s, []))
+
+
+class FakeConn:
+    def __init__(self):
+        self.calls = []
+
+    def uid(self, *args):
+        self.calls.append(args)
+        return "OK", [b""]
+
+    def expunge(self):
+        self.calls.append(("EXPUNGE-ALL",))
+        return "OK", [b""]
+
+
+def fake_box(c, caps=("MOVE", "UIDPLUS")):
+    box = object.__new__(mail.Mailbox)
+    box.cfg, box.readonly, box.conn = c, False, FakeConn()
+    box.can_move, box.can_uid_expunge = "MOVE" in caps, "UIDPLUS" in caps
+    return box
+
+
+class ProcessedActionTests(unittest.TestCase):
+    def test_keep_only_marks_read(self):
+        box = fake_box(cfg(processed_action="keep"))
+        box.done(7)
+        self.assertEqual(box.conn.calls, [("STORE", "7", "+FLAGS.SILENT", r"(\Seen)")])
+
+    def test_move(self):
+        box = fake_box(cfg(processed_action="move", archive_folder="INBOX.processed"))
+        box.done(7)
+        self.assertEqual(box.conn.calls[-1], ("MOVE", "7", "INBOX.processed"))
+
+    def test_move_without_move_capability_copies_then_expunges_one(self):
+        box = fake_box(cfg(processed_action="move", archive_folder="Archive"), caps=("UIDPLUS",))
+        box.done(7)
+        self.assertEqual([c[0] for c in box.conn.calls], ["STORE", "COPY", "STORE", "EXPUNGE"])
+        self.assertEqual(box.conn.calls[-1], ("EXPUNGE", "7"))
+
+    def test_delete_expunges_only_that_uid(self):
+        box = fake_box(cfg(processed_action="delete"))
+        box.done(7)
+        self.assertEqual(box.conn.calls[1:], [("STORE", "7", "+FLAGS.SILENT", r"(\Deleted)"), ("EXPUNGE", "7")])
+
+    def test_delete_without_uidplus_falls_back(self):
+        box = fake_box(cfg(processed_action="delete"), caps=())
+        box.done(7)
+        self.assertEqual(box.conn.calls[-1], ("EXPUNGE-ALL",))
+
+    def test_capabilities_are_read_after_login(self):
+        # Dovecot-style servers list MOVE/UIDPLUS only once logged in.
+        class FakeIMAP:
+            def __init__(self, *a, **kw):
+                self.capabilities = ("IMAP4REV1", "AUTH=PLAIN")
+
+            def login(self, u, p):
+                return "OK", [b""]
+
+            def capability(self):
+                return "OK", [b"IMAP4rev1 UIDPLUS MOVE IDLE"]
+
+            def select(self, f, readonly=False):
+                return "OK", [b"1"]
+
+            def response(self, code):
+                return "OK", [b"42"]
+
+        orig = mail.imaplib.IMAP4_SSL
+        mail.imaplib.IMAP4_SSL = FakeIMAP
+        try:
+            box = mail.Mailbox(cfg())
+        finally:
+            mail.imaplib.IMAP4_SSL = orig
+        self.assertTrue(box.can_move)
+        self.assertTrue(box.can_uid_expunge)
+        self.assertEqual(box.uidvalidity, 42)
+
+    def test_readonly_touches_nothing(self):
+        box = fake_box(cfg(processed_action="delete"))
+        box.readonly = True
+        box.done(7)
+        self.assertEqual(box.conn.calls, [])
+
+    def test_config_parsing(self):
+        env = {"EMAIL": "a@example.org", "PASSWORD": "x", "FWD_REPORT_EMAIL": "b@example.org", "IMAP_HOST": "h"}
+        old = dict(os.environ)
+        try:
+            os.environ.clear()
+            os.environ.update(env)
+            self.assertEqual(Config.from_env().processed_action, "keep")
+            os.environ["IMAP_ARCHIVE_FOLDER"] = "Done"
+            self.assertEqual(Config.from_env().processed_action, "move")  # folder alone implies move
+            os.environ["PROCESSED_ACTION"] = "delete"
+            c = Config.from_env()
+            self.assertEqual((c.processed_action, c.archive_folder), ("delete", ""))
+            del os.environ["IMAP_ARCHIVE_FOLDER"]
+            os.environ["PROCESSED_ACTION"] = "move"
+            with self.assertRaises(SystemExit):
+                Config.from_env()
+            os.environ["PROCESSED_ACTION"] = "shred"
+            with self.assertRaises(SystemExit):
+                Config.from_env()
+        finally:
+            os.environ.clear()
+            os.environ.update(old)
+
+    def test_fully_handled(self):
+        self.assertTrue(fully_handled("reports=1 dup=0 bad=0 forensic=0"))
+        self.assertTrue(fully_handled("reports=0 dup=1 bad=0 forensic=0"))
+        self.assertFalse(fully_handled("reports=1 dup=0 bad=1 forensic=0"))
+        self.assertFalse(fully_handled("no-report"))
+
+    def test_poll_only_acts_on_messages_whose_reports_were_stored(self):
+        good = MIMEMultipart()
+        good["Subject"] = "Report"
+        good.attach(MIMEApplication(fixture("yahoo.xml.gz"), "gzip", Name="y.xml.gz"))
+        bad = MIMEMultipart()
+        bad["Subject"] = "Broken"
+        bad.attach(MIMEApplication(b"\x1f\x8bjunk", "gzip", Name="b.xml.gz"))
+        human = EmailMessage()
+        human["Subject"] = "Question about DMARC"
+        human["From"] = "someone@example.net"
+        human.set_content("hi")
+        msgs = {1: good.as_bytes(), 2: bad.as_bytes(), 3: human.as_bytes()}
+        done = []
+
+        class Box:
+            uidvalidity = 1
+
+            def __init__(self, c, readonly=False):
+                pass
+
+            def ensure_folder(self, f):
+                pass
+
+            def uids(self):
+                return list(msgs)
+
+            def fetch(self, uids):
+                return [(u, msgs[u]) for u in uids]
+
+            def done(self, uid):
+                done.append(uid)
+
+            def close(self):
+                pass
+
+        store = Store(":memory:")
+        orig = main_mod.mail.Mailbox
+        main_mod.mail.Mailbox = Box
+        try:
+            main_mod.poll(cfg(processed_action="delete"), store)
+            main_mod.poll(cfg(processed_action="delete"), store)  # second pass: nothing new
+        finally:
+            main_mod.mail.Mailbox = orig
+        self.assertEqual(done, [1])
+        notes = " ".join(n["text"] for n in store.pending()[2])
+        self.assertIn("Could not read attachment", notes)
+        self.assertIn("Question about DMARC", notes)
 
 
 if __name__ == "__main__":

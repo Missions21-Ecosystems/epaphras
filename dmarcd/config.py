@@ -62,7 +62,11 @@ class Config:
     imap_security: str = "ssl"  # ssl | starttls
     imap_user: str = ""
     imap_folder: str = "INBOX"
-    archive_folder: str = ""  # move handled messages here ("" = leave, mark \Seen)
+    # After a message's reports are stored: keep (mark read), move (to
+    # archive_folder) or delete. Messages without a readable report are
+    # never moved or deleted.
+    processed_action: str = "keep"
+    archive_folder: str = ""
 
     smtp_host: str = ""
     smtp_port: int = 465
@@ -102,6 +106,12 @@ class Config:
             raise SystemExit("IMAP_SECURITY must be ssl or starttls")
         if smtp_security not in ("ssl", "starttls", "none"):
             raise SystemExit("SMTP_SECURITY must be ssl, starttls or none")
+        archive_folder = _env("IMAP_ARCHIVE_FOLDER")
+        action = _env("PROCESSED_ACTION").lower() or ("move" if archive_folder else "keep")
+        if action not in ("keep", "move", "delete"):
+            raise SystemExit("PROCESSED_ACTION must be keep, move or delete")
+        if action == "move" and not archive_folder:
+            raise SystemExit("PROCESSED_ACTION=move needs IMAP_ARCHIVE_FOLDER")
         digest_time = _env("DIGEST_TIME")
         if digest_time:
             hh, _, mm = digest_time.partition(":")
@@ -116,7 +126,8 @@ class Config:
             imap_security=imap_security,
             imap_user=_env("IMAP_USER", email),
             imap_folder=_env("IMAP_FOLDER", "INBOX"),
-            archive_folder=_env("IMAP_ARCHIVE_FOLDER"),
+            processed_action=action,
+            archive_folder=archive_folder if action == "move" else "",
             smtp_host=_env("SMTP_HOST", imap_host),
             smtp_port=_int("SMTP_PORT", {"ssl": 465, "starttls": 587, "none": 25}[smtp_security]),
             smtp_security=smtp_security,

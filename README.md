@@ -48,8 +48,11 @@ Forensic (failure, `ruf`) reports are recognised and listed as action items.
    directly by receivers), or inside a forwarded message.
 3. Reports are stored once, keyed by reporter + report ID — reporters that
    resend the same report don't produce duplicates.
-4. Handled messages are marked read and, if `IMAP_ARCHIVE_FOLDER` is set,
-   moved there.
+4. Once a message's reports are saved, it is marked read and then kept, moved
+   to `IMAP_ARCHIVE_FOLDER`, or deleted, per `PROCESSED_ACTION`
+   (`keep` / `move` / `delete`; default `keep`). Messages without a DMARC
+   report, or with one that can't be read, are never moved or deleted — they
+   stay unread and the next digest mentions them.
 5. A digest of everything not yet sent goes out after each check that found
    reports, or once a day at `DIGEST_TIME`. If sending fails, it's retried on
    the next check; nothing is lost.
