@@ -6,6 +6,14 @@ digest that says what, if anything, you need to fix.
 
 Python 3.10+ standard library only — no third-party dependencies.
 
+**No AI.** dmarcd does not use AI or language models to read your reports or
+write the digest. Reports are parsed as XML, and every finding and
+recommendation comes from fixed, readable rules in
+[dmarcd/analyze.py](dmarcd/analyze.py). The same reports (and reverse-DNS
+answers) always produce the same digest, and your report data never leaves
+your machine — the only outbound connections are to your own mail server and
+reverse-DNS lookups of the sending IPs (turn those off with `RDNS=0`).
+
 ## What the digest contains
 
 - **Headline per domain**: messages seen, % passing DMARC, failures, the policy
