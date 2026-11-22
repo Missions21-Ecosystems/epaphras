@@ -67,6 +67,8 @@ class Config:
     # never moved or deleted.
     processed_action: str = "keep"
     archive_folder: str = ""
+    # Delete messages that contain no DMARC report at all (no-reply mailbox).
+    inbox_cleanup: bool = False
 
     smtp_host: str = ""
     smtp_port: int = 465
@@ -128,6 +130,7 @@ class Config:
             imap_folder=_env("IMAP_FOLDER", "INBOX"),
             processed_action=action,
             archive_folder=archive_folder if action == "move" else "",
+            inbox_cleanup=_bool("INBOX_CLEANUP", False),
             smtp_host=_env("SMTP_HOST", imap_host),
             smtp_port=_int("SMTP_PORT", {"ssl": 465, "starttls": 587, "none": 25}[smtp_security]),
             smtp_security=smtp_security,

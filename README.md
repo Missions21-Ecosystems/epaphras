@@ -60,7 +60,10 @@ Forensic (failure, `ruf`) reports are recognised and listed as action items.
    to `IMAP_ARCHIVE_FOLDER`, or deleted, per `PROCESSED_ACTION`
    (`keep` / `move` / `delete`; default `keep`). Messages without a DMARC
    report, or with one that can't be read, are never moved or deleted — they
-   stay unread and the next digest mentions them.
+   stay unread and the next digest mentions them — unless `INBOX_CLEANUP=1`
+   (for a no-reply, report-only mailbox), which deletes messages that contain
+   no DMARC report at all. Unreadable reports are kept either way, and the
+   digest lists what was deleted.
 5. A digest of everything not yet sent goes out after each check that found
    reports, or once a day at `DIGEST_TIME`. If sending fails, it's retried on
    the next check; nothing is lost.

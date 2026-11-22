@@ -102,6 +102,7 @@ def poll(cfg: Config, store: Store, readonly: bool = False) -> int:
         new = [u for u in box.uids() if u not in seen]
         if new:
             log.info("%d new message(s) in %s", len(new), cfg.imap_folder)
+        cleaned: list[str] = []
         for uid, raw in box.fetch(new):
             msg = extract.parse_message(raw)
             outcome = ingest(store, raw, f"uid {uid}")
@@ -111,6 +112,10 @@ def poll(cfg: Config, store: Store, readonly: bool = False) -> int:
             log.info("uid %s from %s: %s", uid, _header(msg, "From"), outcome)
             if fully_handled(outcome):
                 box.done(uid)
+            elif outcome == "no-report" and cfg.inbox_cleanup:
+                box.delete(uid)
+                cleaned.append(f"“{_header(msg, 'Subject') or '(no subject)'}” from {_header(msg, 'From') or '?'}")
+                log.info("uid %s deleted (INBOX_CLEANUP: no DMARC report)", uid)
             else:
                 # Not ours to tidy away: a human message, or a report we
                 # couldn't read. Leave it unread where it is.
@@ -119,6 +124,11 @@ def poll(cfg: Config, store: Store, readonly: bool = False) -> int:
                                    f"“{_header(msg, 'Subject')}” from {_header(msg, 'From')}.")
                     store.commit()
                 log.info("uid %s left in place, unread", uid)
+        if cleaned:
+            shown = "; ".join(cleaned[:10]) + (f"; and {len(cleaned) - 10} more" if len(cleaned) > 10 else "")
+            store.add_note(f"INBOX_CLEANUP deleted {len(cleaned)} message(s) from {cfg.imap_folder} that had no "
+                           f"DMARC report: {shown}.")
+            store.commit()
         return len(new)
     finally:
         box.close()

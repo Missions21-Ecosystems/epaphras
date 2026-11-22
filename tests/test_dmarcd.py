@@ -345,6 +345,9 @@ class ProcessedActionTests(unittest.TestCase):
             os.environ.clear()
             os.environ.update(env)
             self.assertEqual(Config.from_env().processed_action, "keep")
+            self.assertFalse(Config.from_env().inbox_cleanup)
+            os.environ["INBOX_CLEANUP"] = "1"
+            self.assertTrue(Config.from_env().inbox_cleanup)
             os.environ["IMAP_ARCHIVE_FOLDER"] = "Done"
             self.assertEqual(Config.from_env().processed_action, "move")  # folder alone implies move
             os.environ["PROCESSED_ACTION"] = "delete"
@@ -367,7 +370,7 @@ class ProcessedActionTests(unittest.TestCase):
         self.assertFalse(fully_handled("reports=1 dup=0 bad=1 forensic=0"))
         self.assertFalse(fully_handled("no-report"))
 
-    def test_poll_only_acts_on_messages_whose_reports_were_stored(self):
+    def run_poll(self, c):
         good = MIMEMultipart()
         good["Subject"] = "Report"
         good.attach(MIMEApplication(fixture("yahoo.xml.gz"), "gzip", Name="y.xml.gz"))
@@ -379,7 +382,7 @@ class ProcessedActionTests(unittest.TestCase):
         human["From"] = "someone@example.net"
         human.set_content("hi")
         msgs = {1: good.as_bytes(), 2: bad.as_bytes(), 3: human.as_bytes()}
-        done = []
+        done, deleted = [], []
 
         class Box:
             uidvalidity = 1
@@ -399,6 +402,9 @@ class ProcessedActionTests(unittest.TestCase):
             def done(self, uid):
                 done.append(uid)
 
+            def delete(self, uid):
+                deleted.append(uid)
+
             def close(self):
                 pass
 
@@ -406,14 +412,36 @@ class ProcessedActionTests(unittest.TestCase):
         orig = main_mod.mail.Mailbox
         main_mod.mail.Mailbox = Box
         try:
-            main_mod.poll(cfg(processed_action="delete"), store)
-            main_mod.poll(cfg(processed_action="delete"), store)  # second pass: nothing new
+            main_mod.poll(c, store)
+            main_mod.poll(c, store)  # second pass: nothing new
         finally:
             main_mod.mail.Mailbox = orig
-        self.assertEqual(done, [1])
         notes = " ".join(n["text"] for n in store.pending()[2])
+        return done, deleted, notes
+
+    def test_poll_only_acts_on_messages_whose_reports_were_stored(self):
+        done, deleted, notes = self.run_poll(cfg(processed_action="delete"))
+        self.assertEqual(done, [1])
+        self.assertEqual(deleted, [])
         self.assertIn("Could not read attachment", notes)
-        self.assertIn("Question about DMARC", notes)
+        self.assertIn("Left in INBOX (no DMARC report in it): “Question about DMARC”", notes)
+
+    def test_inbox_cleanup_deletes_only_non_report_mail(self):
+        done, deleted, notes = self.run_poll(cfg(processed_action="keep", inbox_cleanup=True))
+        self.assertEqual(done, [1])
+        self.assertEqual(deleted, [3])  # the unreadable report (2) is kept
+        self.assertIn("INBOX_CLEANUP deleted 1 message(s)", notes)
+        self.assertIn("“Question about DMARC” from someone@example.net", notes)
+        self.assertNotIn("Left in INBOX", notes)
+
+    def test_mailbox_delete_respects_readonly(self):
+        box = fake_box(cfg(inbox_cleanup=True))
+        box.delete(9)
+        self.assertEqual(box.conn.calls, [("STORE", "9", "+FLAGS.SILENT", r"(\Deleted)"), ("EXPUNGE", "9")])
+        box = fake_box(cfg(inbox_cleanup=True))
+        box.readonly = True
+        box.delete(9)
+        self.assertEqual(box.conn.calls, [])
 
 
 class PlainSummaryTests(unittest.TestCase):

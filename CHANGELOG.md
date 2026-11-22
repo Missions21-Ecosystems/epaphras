@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — 2026-11-22
+
+- `INBOX_CLEANUP=1` treats the mailbox as a no-reply, report-only inbox:
+  messages containing no DMARC report (bounces, auto-replies, spam, people
+  writing in) are permanently deleted. Messages with an unreadable report are
+  still kept. Each poll adds one note to the next digest listing what was
+  deleted. Default off.
+
 ## 0.3.0 — 2026-11-22
 
 - Digest opens with an "In short" section for non-technical readers: a

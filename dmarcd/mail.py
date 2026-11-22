@@ -83,6 +83,12 @@ class Mailbox:
         elif action == "delete":
             self._expunge(uid)
 
+    def delete(self, uid: int) -> None:
+        """Permanently delete one message (INBOX_CLEANUP)."""
+        if self.readonly:
+            return
+        self._expunge(uid)
+
     def _expunge(self, uid: int) -> None:
         """Permanently remove one message. With UIDPLUS only that message is
         expunged; without it, a plain EXPUNGE also removes anything else in
