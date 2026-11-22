@@ -9,6 +9,10 @@ from datetime import datetime, timezone
 from html import escape
 
 from .analyze import ACTION, INFO, REVIEW, DomainSummary, Finding
+from .plain import BAD, GOOD, summarize_plain
+
+PLAIN_COLORS = {GOOD: ("#067647", "#ecfdf3"), "ok": ("#175cd3", "#eff8ff"), BAD: ("#b42318", "#fef3f2")}
+PLAIN_MARK = {GOOD: "✔", "ok": "●", BAD: "!"}
 
 LABELS = {ACTION: "ACTION", REVIEW: "REVIEW", INFO: "FYI"}
 COLORS = {ACTION: "#b42318", REVIEW: "#b54708", INFO: "#475467"}
@@ -64,7 +68,13 @@ def text_body(summaries: list[DomainSummary], extra: list[Finding], notes: list[
     out = io.StringIO()
     w = out.write
     findings = _all_findings(summaries, extra)
-    w("DMARC REPORT DIGEST\n===================\n\n")
+    plain = summarize_plain(summaries, extra, tz)
+    w("IN SHORT\n========\n\n")
+    w(f"{plain.headline}\n\n")
+    for p in plain.points:
+        w(f"* {p}\n")
+    w(f"\nWhat to do: {plain.todo}\n\n\n")
+    w("DETAILS FOR WHOEVER MANAGES YOUR EMAIL\n======================================\n\n")
     for s in summaries:
         w(f"{s.domain}  ({_period(s, tz)})\n")
         w(f"  {len(s.reports)} report(s), {s.total} message(s), {s.passed} passed DMARC ({_pct(s.passed, s.total)}), {s.failed} failed\n")
@@ -120,6 +130,22 @@ def html_body(summaries: list[DomainSummary], extra: list[Finding], notes: list[
     h = ["<!doctype html><html><body style='margin:0;background:#f9fafb'>"
          "<div style='max-width:760px;margin:0 auto;padding:20px 16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#101828;font-size:14px;line-height:1.45'>"
          "<h1 style='font-size:20px;margin:0 0 12px'>DMARC report digest</h1>"]
+    plain = summarize_plain(summaries, extra, tz)
+    fg, bg = PLAIN_COLORS[plain.status]
+    h.append(
+        f"<div style='background:{bg};border:1px solid {fg}33;border-radius:10px;padding:16px 18px;margin-bottom:18px'>"
+        "<div style='font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#475467;margin-bottom:6px'>In short</div>"
+        f"<div style='font-size:18px;font-weight:600;color:{fg};margin-bottom:10px'>"
+        f"<span style='display:inline-block;width:24px;height:24px;line-height:24px;text-align:center;border-radius:12px;"
+        f"background:{fg};color:#fff;font-size:14px;margin-right:8px;vertical-align:1px'>{PLAIN_MARK[plain.status]}</span>"
+        f"{escape(plain.headline)}</div>"
+        "<ul style='margin:0 0 10px;padding-left:20px;font-size:15px;line-height:1.5;color:#101828'>"
+        + "".join(f"<li style='margin:0 0 6px'>{escape(p)}</li>" for p in plain.points)
+        + "</ul>"
+        f"<div style='font-size:15px;color:#101828'><b>What to do:</b> {escape(plain.todo)}</div></div>"
+        "<div style='font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#475467;margin:0 0 8px'>"
+        "Details for whoever manages your email</div>"
+    )
     for s in summaries:
         ok = s.failed == 0
         h.append(

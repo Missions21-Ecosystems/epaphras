@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from dmarcd import analyze, extract, render  # noqa: E402
+from dmarcd import analyze, extract, plain, render  # noqa: E402
 from dmarcd import mail  # noqa: E402
 from dmarcd import __main__ as main_mod  # noqa: E402
 from dmarcd.__main__ import build_digest, digest_due, fully_handled, ingest  # noqa: E402
@@ -414,6 +414,76 @@ class ProcessedActionTests(unittest.TestCase):
         notes = " ".join(n["text"] for n in store.pending()[2])
         self.assertIn("Could not read attachment", notes)
         self.assertIn("Question about DMARC", notes)
+
+
+class PlainSummaryTests(unittest.TestCase):
+    TZ = ZoneInfo("UTC")
+    JARGON = ("DKIM", "SPF", "DMARC", "p=none", "quarantine", "198.51.", "203.0.", "192.0.2.")
+
+    def plain_for(self, xml: bytes, rdns=None, extra=()):
+        return plain.summarize_plain(analyze.summarize([parse_report(xml)], rdns or {}), list(extra), self.TZ)
+
+    def assert_plain(self, p):
+        text = " ".join([p.headline, *p.points, p.todo])
+        for word in self.JARGON:
+            self.assertNotIn(word, text)
+        return text
+
+    def test_all_good_but_monitor_only(self):
+        p = self.plain_for(report_xml(rec("192.0.2.1", 5, "pass", "pass",
+                                          "<dkim><domain>example.org</domain><selector>s</selector><result>pass</result></dkim>")))
+        text = self.assert_plain(p)
+        self.assertEqual(p.status, "ok")  # tightening the policy is suggested
+        self.assertIn("All of them were confirmed", text)
+        self.assertIn("no sign of anyone impersonating", text)
+        self.assertIn("ready to turn it on", text)
+        self.assertIn("Nothing urgent", p.todo)
+
+    def test_fully_protected_and_clean_is_good(self):
+        p = self.plain_for(report_xml(rec("192.0.2.1", 5, "pass", "pass",
+                                          "<dkim><domain>example.org</domain><selector>s</selector><result>pass</result></dkim>"),
+                                      p="reject"))
+        self.assertEqual(p.status, "good")
+        self.assertEqual(p.todo, "No action needed.")
+        self.assertIn("fully on", self.assert_plain(p))
+
+    def test_spoofing_explained(self):
+        p = self.plain_for(report_xml(rec("203.0.113.50", 12, "fail", "fail")))
+        text = self.assert_plain(p)
+        self.assertEqual(p.status, "bad")
+        self.assertIn("12 emails from computers we don't recognise pretended to be from @example.org", text)
+        self.assertIn("monitor only", text)
+        self.assertIn("forward this email", p.todo)
+
+    def test_spoofing_blocked(self):
+        p = self.plain_for(report_xml(rec("203.0.113.50", 4, "fail", "fail", disposition="reject"), p="reject"))
+        self.assertIn("blocked or sent them to spam", self.assert_plain(p))
+
+    def test_our_own_mail_failing(self):
+        auth = "<spf><domain>bounce.sendgrid.net</domain><result>pass</result></spf>"
+        p = self.plain_for(report_xml(rec("167.89.0.1", 6, "fail", "fail", auth)))
+        text = self.assert_plain(p)
+        self.assertIn("6 emails that we really did send (through SendGrid) failed the checks", text)
+        self.assertIn("6 were not", text)
+
+    def test_unidentified_servers_have_no_ips(self):
+        p = self.plain_for(report_xml(rec("198.51.100.9", 2, "fail", "pass",
+                                          "<spf><domain>example.org</domain><result>pass</result></spf>")))
+        self.assertIn("a mail server we couldn't identify", self.assert_plain(p))
+
+    def test_forensic_alerts_counted(self):
+        f = analyze.forensic_finding({"source-ip": ["203.0.113.1"]})
+        p = plain.summarize_plain([], [f], self.TZ)
+        self.assertEqual(p.status, "bad")
+        self.assertIn("1 alert", " ".join(p.points))
+
+    def test_digest_starts_with_plain_summary(self):
+        s = analyze.summarize([parse_report(report_xml(rec("203.0.113.50", 12, "fail", "fail")))])
+        text = render.text_body(s, [], [], self.TZ)
+        self.assertTrue(text.startswith("IN SHORT"))
+        self.assertLess(text.index("What to do:"), text.index("DETAILS FOR WHOEVER"))
+        html = render.html_body(s, [], [], self.TZ)
+        self.assertLess(html.index("In short"), html.index("Details for whoever"))
 
 
 if __name__ == "__main__":

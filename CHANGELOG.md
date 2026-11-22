@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-11-22
+
+- Digest opens with an "In short" section for non-technical readers: a
+  plain-language status, a few jargon-free sentences (is our email checking
+  out, is anyone impersonating us, is any of our own mail failing, how strong
+  is protection) and who needs to act. Built from the same analysis as the
+  technical findings (`dmarcd/plain.py`), so the two always agree.
+
 ## 0.2.0 — 2026-11-22
 
 - `PROCESSED_ACTION=keep|move|delete` decides what happens to a report email

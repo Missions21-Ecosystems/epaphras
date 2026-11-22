@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dmarcd"
-version = "0.2.0"
+version = "0.3.0"
 description = "Poll a DMARC report mailbox and email a human-readable digest with action items"
 readme = "README.md"
 requires-python = ">=3.10"

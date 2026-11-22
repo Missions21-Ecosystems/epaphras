@@ -104,6 +104,9 @@ class Source:
     selectors: set[str] = field(default_factory=set)  # aligned, passing
     envelope_domains: set[str] = field(default_factory=set)
     failures: list[tuple[Record, Report]] = field(default_factory=list)
+    # Set by _findings for sources with failures, in plain terms:
+    # forwarded | ours | unrecognised | spoof
+    failure_class: str = ""
     spf_only_records: list[tuple[Record, Report]] = field(default_factory=list)
 
     @property
@@ -312,6 +315,7 @@ def _findings(s: DomainSummary) -> list[Finding]:
         fwd = sum(rec.count for rec, _ in src.failures if any(t in FORWARD_REASONS for t, _ in rec.reasons))
         kind = "forwarder" if fwd and fwd == src.failed else src.kind
         if kind == "forwarder":
+            src.failure_class = "forwarded"
             out.append(Finding(
                 REVIEW if blocked else INFO, d,
                 f"Forwarded mail via {src.label} failed DMARC ({src.failed})",
@@ -321,6 +325,7 @@ def _findings(s: DomainSummary) -> list[Finding]:
                  "If the volume is significant and the recipients matter, ask that organisation to enable ARC or to whitelist your domain."],
             ))
         elif kind == "sender":
+            src.failure_class = "ours"
             legit_problems = True
             steps = []
             if src.passed:
@@ -336,6 +341,7 @@ def _findings(s: DomainSummary) -> list[Finding]:
             out.append(Finding(ACTION if not src.passed or src.failed >= 5 or blocked else REVIEW, d,
                                f"{src.label} sent {src.failed} message(s) that failed DMARC", detail, steps))
         elif any_auth:
+            src.failure_class = "unrecognised"
             out.append(Finding(
                 REVIEW, d,
                 f"Unrecognised source {src.label} failed DMARC ({src.failed})",
@@ -347,6 +353,7 @@ def _findings(s: DomainSummary) -> list[Finding]:
             if not other_domains:
                 legit_problems = True
         else:
+            src.failure_class = "spoof"
             spoofing = True
             out.append(Finding(
                 ACTION if not enforcing or src.failed >= 10 else REVIEW, d,

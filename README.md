@@ -16,6 +16,14 @@ reverse-DNS lookups of the sending IPs (turn those off with `RDNS=0`).
 
 ## What the digest contains
 
+- **In short** (at the top, for non-technical readers such as directors or
+  owners): a coloured status — *All good*, *Working fine, with a suggested
+  improvement*, or *Something needs attention* — then a few plain sentences
+  with no jargon or IP addresses: how many emails sent in your name checked
+  out, whether anyone is impersonating you, whether any of your own email is
+  having trouble, how strong your protection is, and who (if anyone) needs to
+  do something. Everything below it is labelled as detail for whoever manages
+  your email.
 - **Headline per domain**: messages seen, % passing DMARC, failures, the policy
   receivers saw.
 - **What to do**: findings ranked ACTION / REVIEW / FYI, each with an
